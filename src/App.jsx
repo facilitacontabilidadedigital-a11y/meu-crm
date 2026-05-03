@@ -2686,9 +2686,10 @@ const PERMISSOES = {
 };
 
 const SEED_USUARIOS = [
-  { id:"u1", nome:"Você (Admin)", email:"admin@contafacil.com", senha:"admin123", perfil:"Admin", ativo:true, avatar:"A", cor:T.red, data_criacao:"2024-01-01" },
-  { id:"u2", nome:"Ana Silva", email:"ana@contafacil.com", senha:"ana123", perfil:"Contador", ativo:true, avatar:"AS", cor:T.accent, data_criacao:"2024-01-15" },
-  { id:"u3", nome:"Pedro Costa", email:"pedro@contafacil.com", senha:"pedro123", perfil:"Contador", ativo:true, avatar:"PC", cor:T.green, data_criacao:"2024-02-01" },
+  { id:"u1", nome:"Caio", email:"caiolandim2021@gmail.com", senha:"Facilita@2024", perfil:"Admin", ativo:true, avatar:"CA", cor:T.red, data_criacao:"2024-01-01" },
+  { id:"u2", nome:"Comercial 1", email:"comercial1@facilita.com", senha:"Chcl1993@", perfil:"Comercial", ativo:true, avatar:"C1", cor:T.accent, data_criacao:"2024-01-15" },
+  { id:"u3", nome:"Comercial 2", email:"comercial2@facilita.com", senha:"Chcl1993@", perfil:"Comercial", ativo:true, avatar:"C2", cor:T.green, data_criacao:"2024-02-01" },
+  { id:"u4", nome:"Comercial 3", email:"comercial3@facilita.com", senha:"Chcl1993@", perfil:"Comercial", ativo:true, avatar:"C3", cor:T.yellow, data_criacao:"2024-02-01" },
 ];
 
 function LoginScreen({ onLogin }) {
@@ -2722,7 +2723,7 @@ function LoginScreen({ onLogin }) {
         {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:40 }}>
           <div style={{ width:56, height:56, borderRadius:16, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.head, fontWeight:800, fontSize:26, color:"#fff", margin:"0 auto 16px" }}>C</div>
-          <div style={{ fontFamily:T.head, fontWeight:800, fontSize:24, color:T.text }}>ContaFácil CRM</div>
+          <div style={{ fontFamily:T.head, fontWeight:800, fontSize:24, color:T.text }}>Facilita CRM</div>
           <div style={{ fontSize:14, color:T.textMuted, marginTop:4 }}>Faça login para continuar</div>
         </div>
 
@@ -2757,21 +2758,6 @@ function LoginScreen({ onLogin }) {
             {loading ? "Entrando..." : "Entrar →"}
           </button>
 
-          {/* Dica de usuários */}
-          <div style={{ marginTop:24, background:T.bgMid, borderRadius:10, padding:14 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:10, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usuários de demonstração</div>
-            {SEED_USUARIOS.map(u=>(
-              <div key={u.id} onClick={()=>{ setEmail(u.email); setSenha(u.senha); }}
-                style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 0", borderBottom:`1px solid ${T.border}33`, cursor:"pointer" }}>
-                <div>
-                  <span style={{ fontSize:12, fontWeight:600, color:T.text }}>{u.nome}</span>
-                  <span style={{ fontSize:11, color:T.textMuted, marginLeft:6 }}>{u.email}</span>
-                </div>
-                <Badge color={({Admin:"red",Gestor:"purple",Contador:"blue",Comercial:"yellow"})[u.perfil]||"gray"} size="sm">{u.perfil}</Badge>
-              </div>
-            ))}
-            <div style={{ fontSize:11, color:T.textMuted, marginTop:8 }}>↑ Clique para preencher automaticamente</div>
-          </div>
         </div>
       </div>
     </div>
