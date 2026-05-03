@@ -388,6 +388,262 @@ function Sidebar({ active, onNav, alerts }) {
   );
 }
 
+// ─── CHAT (WHATSAPP) ─────────────────────────────────────────────────────────
+function Chat() {
+  const [chats, setChats] = useState([]);
+  const [selChat, setSelChat] = useState(null);
+  const [msgs, setMsgs] = useState([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState(null);
+  const msgsEndRef = useRef(null);
+  const pollRef = useRef(null);
+
+  // Buscar lista de chats
+  const fetchChats = async () => {
+    try {
+      const res = await fetch(`${EVO_URL}/chat/findChats/${EVO_INSTANCE}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) throw new Error("Falha ao buscar chats");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.chats || []);
+      // Ordenar por última mensagem mais recente
+      list.sort((a, b) => (b.lastMsgTimestamp || b.updatedAt || 0) - (a.lastMsgTimestamp || a.updatedAt || 0));
+      setChats(list);
+      setError(null);
+    } catch(e) {
+      setError("Não foi possível carregar as conversas. Verifique se o WhatsApp está conectado.");
+    } finally {
+      setLoadingChats(false);
+    }
+  };
+
+  // Buscar mensagens de um chat
+  const fetchMsgs = async (remoteJid) => {
+    if (!remoteJid) return;
+    setLoadingMsgs(true);
+    try {
+      const res = await fetch(`${EVO_URL}/chat/findMessages/${EVO_INSTANCE}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+        body: JSON.stringify({ where: { key: { remoteJid } }, limit: 50 })
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.messages?.records || data.records || []);
+      list.sort((a, b) => (a.messageTimestamp || 0) - (b.messageTimestamp || 0));
+      setMsgs(list);
+    } catch {}
+    finally { setLoadingMsgs(false); }
+  };
+
+  // Scroll automático
+  useEffect(() => {
+    msgsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
+
+  // Polling
+  useEffect(() => {
+    fetchChats();
+    pollRef.current = setInterval(() => {
+      fetchChats();
+      if (selChat) fetchMsgs(selChat.id);
+    }, 10000);
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  // Quando muda chat selecionado
+  useEffect(() => {
+    if (selChat) {
+      setMsgs([]);
+      fetchMsgs(selChat.id);
+    }
+  }, [selChat]);
+
+  const sendMsg = async () => {
+    if (!text.trim() || !selChat || sending) return;
+    const number = selChat.id.replace(/@.*/,"");
+    setSending(true);
+    const ok = await sendWhatsAppMsg(number, text.trim());
+    if (ok) {
+      setText("");
+      setTimeout(() => fetchMsgs(selChat.id), 1000);
+    }
+    setSending(false);
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  };
+
+  // Nome amigável do chat
+  const chatName = (c) => c.pushName || c.name || (c.id||"").replace(/@.*/,"").replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "($2) $3-$4");
+  const chatAvatar = (c) => (chatName(c)||"?")[0].toUpperCase();
+  const chatLast = (c) => {
+    const t = c.lastMessage?.conversation || c.lastMessage?.extendedTextMessage?.text || c.lastMsgText || "";
+    return t.length > 40 ? t.slice(0,40)+"…" : t;
+  };
+  const tsToTime = (ts) => {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
+  };
+  const msgText = (m) =>
+    m.message?.conversation ||
+    m.message?.extendedTextMessage?.text ||
+    m.message?.imageMessage?.caption ||
+    (m.message?.imageMessage ? "🖼 Imagem" : "") ||
+    (m.message?.audioMessage ? "🎵 Áudio" : "") ||
+    (m.message?.documentMessage ? "📄 Documento" : "") ||
+    (m.message?.stickerMessage ? "🙂 Sticker" : "") ||
+    (m.message?.videoMessage ? "🎥 Vídeo" : "") ||
+    "📎 Anexo";
+
+  const filtered = chats.filter(c => {
+    if (!search) return true;
+    const n = chatName(c).toLowerCase();
+    return n.includes(search.toLowerCase());
+  });
+
+  // Cores de bolha
+  const bubbleOut = T.accent;
+  const bubbleIn  = T.surface2 || "#1e2030";
+
+  return (
+    <div style={{ display:"flex", height:"calc(100vh - 56px)", borderRadius:16, overflow:"hidden", border:`1px solid ${T.border}`, background:T.bg }}>
+
+      {/* ── Lista de conversas ── */}
+      <div style={{ width:320, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", background:T.surface, flexShrink:0 }}>
+        {/* Header */}
+        <div style={{ padding:"16px 16px 12px", borderBottom:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <span style={{ fontFamily:T.head, fontWeight:700, fontSize:16, color:T.text }}>WhatsApp</span>
+            <span style={{ fontSize:11, color:T.accent, background:T.accentGlow, padding:"2px 8px", borderRadius:20, fontWeight:600 }}>● Conectado</span>
+          </div>
+          <input
+            value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="🔍  Buscar conversa…"
+            style={{ width:"100%", background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        {/* Lista */}
+        <div style={{ flex:1, overflowY:"auto" }}>
+          {loadingChats && (
+            <div style={{ padding:24, textAlign:"center", color:T.textMuted, fontSize:13 }}>Carregando conversas…</div>
+          )}
+          {error && (
+            <div style={{ padding:16, margin:12, background:T.redDim, borderRadius:10, fontSize:12, color:T.red }}>{error}</div>
+          )}
+          {!loadingChats && !error && filtered.length === 0 && (
+            <div style={{ padding:24, textAlign:"center", color:T.textMuted, fontSize:13 }}>Nenhuma conversa encontrada</div>
+          )}
+          {filtered.map(c => {
+            const active = selChat?.id === c.id;
+            return (
+              <div key={c.id} onClick={()=>setSelChat(c)}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", cursor:"pointer", borderBottom:`1px solid ${T.border}22`,
+                  background: active ? T.accentGlow : "transparent", transition:"background 0.1s" }}
+                onMouseEnter={e=>{ if(!active) e.currentTarget.style.background=T.bg; }}
+                onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}
+              >
+                <div style={{ width:42, height:42, borderRadius:"50%", background: active ? T.accent : T.border, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:16, color: active ? "#fff" : T.textMuted, flexShrink:0 }}>
+                  {chatAvatar(c)}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+                    <span style={{ fontWeight:600, fontSize:13, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:140 }}>{chatName(c)}</span>
+                    <span style={{ fontSize:10, color:T.textMuted, flexShrink:0 }}>{tsToTime(c.lastMsgTimestamp || c.updatedAt)}</span>
+                  </div>
+                  <div style={{ fontSize:12, color:T.textMuted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginTop:2 }}>{chatLast(c)}</div>
+                </div>
+                {(c.unreadCount > 0) && (
+                  <span style={{ background:T.accent, color:"#fff", borderRadius:"50%", width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0 }}>{c.unreadCount}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Área de mensagens ── */}
+      {!selChat ? (
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:T.textMuted, gap:12 }}>
+          <span style={{ fontSize:48 }}>💬</span>
+          <span style={{ fontSize:16, fontWeight:600, color:T.text }}>Selecione uma conversa</span>
+          <span style={{ fontSize:13 }}>Escolha um contato à esquerda para ver as mensagens</span>
+        </div>
+      ) : (
+        <div style={{ flex:1, display:"flex", flexDirection:"column", background:T.bg }}>
+          {/* Header do chat */}
+          <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:14, background:T.surface }}>
+            <div style={{ width:38, height:38, borderRadius:"50%", background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:15, color:"#fff" }}>
+              {chatAvatar(selChat)}
+            </div>
+            <div>
+              <div style={{ fontWeight:700, fontSize:14, color:T.text }}>{chatName(selChat)}</div>
+              <div style={{ fontSize:11, color:T.textMuted }}>{(selChat.id||"").replace(/@.*/,"").replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "+$1 ($2) $3-$4")}</div>
+            </div>
+            <div style={{ marginLeft:"auto" }}>
+              <button onClick={()=>fetchMsgs(selChat.id)}
+                style={{ background:T.accentGlow, border:`1px solid ${T.accent}44`, color:T.accent, borderRadius:8, padding:"5px 12px", fontSize:12, cursor:"pointer", fontWeight:600 }}>
+                ↻ Atualizar
+              </button>
+            </div>
+          </div>
+
+          {/* Mensagens */}
+          <div style={{ flex:1, overflowY:"auto", padding:"20px 24px", display:"flex", flexDirection:"column", gap:6 }}>
+            {loadingMsgs && <div style={{ textAlign:"center", color:T.textMuted, fontSize:13, marginTop:40 }}>Carregando mensagens…</div>}
+            {!loadingMsgs && msgs.length === 0 && <div style={{ textAlign:"center", color:T.textMuted, fontSize:13, marginTop:40 }}>Nenhuma mensagem encontrada</div>}
+            {msgs.map((m, i) => {
+              const fromMe = m.key?.fromMe === true;
+              const txt = msgText(m);
+              const ts = tsToTime(m.messageTimestamp);
+              return (
+                <div key={m.key?.id || i} style={{ display:"flex", justifyContent: fromMe ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    maxWidth:"65%", padding:"8px 12px", borderRadius: fromMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    background: fromMe ? bubbleOut : bubbleIn,
+                    color: fromMe ? "#fff" : T.text,
+                    fontSize:13, lineHeight:1.5, wordBreak:"break-word", boxShadow:"0 1px 2px #0004"
+                  }}>
+                    {txt}
+                    <div style={{ fontSize:10, opacity:0.7, textAlign:"right", marginTop:4 }}>{ts}</div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={msgsEndRef} />
+          </div>
+
+          {/* Input */}
+          <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10, alignItems:"flex-end", background:T.surface }}>
+            <textarea
+              value={text} onChange={e=>setText(e.target.value)} onKeyDown={handleKey}
+              placeholder="Digite uma mensagem… (Enter para enviar)"
+              rows={1}
+              style={{ flex:1, background:T.bg, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 14px", fontSize:13, color:T.text, outline:"none", resize:"none", lineHeight:1.5, maxHeight:120, overflow:"auto", boxSizing:"border-box" }}
+            />
+            <button onClick={sendMsg} disabled={!text.trim() || sending}
+              style={{ width:44, height:44, borderRadius:"50%", background: text.trim() ? T.accent : T.border, border:"none", color:"#fff", fontSize:18, cursor: text.trim() ? "pointer" : "default", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background 0.15s" }}>
+              {sending ? "…" : "➤"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function Dashboard({ leads, clients, contratos, financeiro, tickets }) {
   const mrr = clients.filter(c=>c.status==="Ativo").reduce((s,c)=>s+c.valor_mensalidade,0);
@@ -3126,6 +3382,7 @@ export default function App() {
     { id:"onboarding", icon:"🚀",  label:"Onboard",  perm:"onboarding" },
     { id:"cobranca",   icon:"💳",  label:"Régua",    perm:"cobranca" },
     { id:"relatorios", icon:"📊",  label:"Relatórios",perm:"relatorios" },
+    { id:"chat",       icon:"💬",  label:"Chat",     perm:"clientes" },
     { id:"usuarios",   icon:"👥",  label:"Equipe",   perm:"usuarios" },
     { id:"config",     icon:"⚙",  label:"Config",   perm:"config" },
   ].filter(n => !n.perm || perms[n.perm]);
@@ -3151,6 +3408,7 @@ export default function App() {
     onboarding:<Onboarding clients={clients} contratos={contratos} setClients={setClients} />,
     cobranca:  <Cobranca clients={clients} financeiro={financeiro} setFinanceiro={setFinanceiro} />,
     relatorios:<Relatorios leads={leads} clients={clients} contratos={contratos} financeiro={financeiro} tickets={tickets} />,
+    chat:      <Chat />,
     usuarios:  <Usuarios currentUser={currentUser} />,
     config:    <Config asaasKey={asaasKey} setAsaasKey={setAsaasKey} />,
   };
