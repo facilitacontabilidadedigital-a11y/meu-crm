@@ -57,6 +57,115 @@ const fmt = n => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BR
 const fmtDate = d => d ? new Date(d+"T12:00:00").toLocaleDateString("pt-BR") : "—";
 const daysAgo = d => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 0;
 
+// ─── EVOLUTION API (WHATSAPP) ─────────────────────────────────────────────────
+const EVO_URL = "https://evolution-api-production-49a5.up.railway.app";
+const EVO_KEY = "daf4ff8632d9475dccfed6fec367147f80c63c972ae9216eede0e4b2f6225fb9";
+const EVO_INSTANCE = "facilita-whatsapp";
+
+function fmtPhone(raw) {
+  // Remove tudo que não é número
+  const digits = (raw||"").replace(/\D/g,"");
+  // Adiciona 55 (Brasil) se não tiver código de país
+  if (digits.length === 10 || digits.length === 11) return "55" + digits;
+  return digits;
+}
+
+async function sendWhatsAppMsg(phone, message) {
+  const number = fmtPhone(phone);
+  if (!number || number.length < 12) {
+    alert("Número de WhatsApp inválido: " + phone);
+    return false;
+  }
+  try {
+    const res = await fetch(`${EVO_URL}/message/sendText/${EVO_INSTANCE}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
+      body: JSON.stringify({ number, text: message })
+    });
+    const data = await res.json();
+    if (res.ok) return true;
+    alert("Erro ao enviar: " + (data.message || JSON.stringify(data)));
+    return false;
+  } catch(e) {
+    alert("Erro de conexão com WhatsApp: " + e.message);
+    return false;
+  }
+}
+
+// ─── MODAL ENVIAR WHATSAPP ────────────────────────────────────────────────────
+function WhatsAppModal({ open, onClose, nome, phone }) {
+  const [msg, setMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    if (open) { setMsg(""); setSent(false); setSending(false); }
+  }, [open]);
+
+  const templates = [
+    { label:"Primeiro contato", text:`Olá ${nome}! 👋 Tudo bem? Sou da Facilita Contabilidade e vi que você tem interesse nos nossos serviços. Posso te ajudar com alguma dúvida?` },
+    { label:"Follow-up", text:`Olá ${nome}! Passando para dar um seguimento à nossa conversa. Conseguiu avaliar nossa proposta? Estou à disposição para qualquer dúvida! 😊` },
+    { label:"Reunião agendada", text:`Olá ${nome}! 📅 Lembrando que temos nossa reunião agendada. Qualquer imprevisto, me avise. Até lá!` },
+    { label:"Cobrança", text:`Olá ${nome}! Notamos uma pendência em aberto na sua conta. Poderia nos dar um retorno para regularizarmos? Estamos à disposição! 🙏` },
+  ];
+
+  const handleSend = async () => {
+    if (!msg.trim()) return;
+    setSending(true);
+    const ok = await sendWhatsAppMsg(phone, msg);
+    setSending(false);
+    if (ok) { setSent(true); setTimeout(onClose, 1500); }
+  };
+
+  if (!open) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, width:520, padding:28, position:"relative" }}>
+        <button onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", color:T.textMuted, fontSize:20, cursor:"pointer" }}>✕</button>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+          <div style={{ width:40, height:40, borderRadius:12, background:"#25D36618", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>💬</div>
+          <div>
+            <div style={{ fontFamily:T.head, fontWeight:700, fontSize:15 }}>Enviar WhatsApp</div>
+            <div style={{ fontSize:12, color:T.textMuted }}>{nome} · {phone}</div>
+          </div>
+        </div>
+        {sent ? (
+          <div style={{ textAlign:"center", padding:"20px 0" }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
+            <div style={{ fontWeight:600, color:T.green }}>Mensagem enviada!</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:T.textMuted, marginBottom:8, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>Templates rápidos</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                {templates.map(t => (
+                  <button key={t.label} onClick={() => setMsg(t.text)}
+                    style={{ padding:"5px 10px", borderRadius:8, border:`1px solid ${T.border}`, background:T.surfaceHigh, color:T.textSub, fontSize:11, cursor:"pointer" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <textarea
+              value={msg} onChange={e => setMsg(e.target.value)}
+              placeholder="Digite sua mensagem..."
+              style={{ width:"100%", minHeight:100, padding:12, borderRadius:10, border:`1px solid ${T.border}`, background:T.bgMid, color:T.text, fontSize:13, resize:"vertical", marginBottom:16 }}
+            />
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <button onClick={onClose} style={{ padding:"9px 18px", borderRadius:9, border:`1px solid ${T.border}`, background:"none", color:T.textSub, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={handleSend} disabled={sending || !msg.trim()}
+                style={{ padding:"9px 18px", borderRadius:9, border:"none", background:"#25D366", color:"#fff", fontWeight:600, cursor:sending?"wait":"pointer", opacity: (!msg.trim()||sending)?0.6:1 }}>
+                {sending ? "Enviando..." : "📤 Enviar"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function useLs(key, init) {
   const [v, sv] = useState(() => { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : init; } catch { return init; } });
   useEffect(() => { localStorage.setItem(key, JSON.stringify(v)); }, [key, v]);
@@ -458,6 +567,7 @@ function Leads({ leads, setLeads, setClients, setContratos }) {
   const [selected, setSelected] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [filterStage, setFilterStage] = useState("Todos");
+  const [waModal, setWaModal] = useState(null); // { nome, phone }
 
   const filtered = leads.filter(l => {
     const q = search.toLowerCase();
@@ -557,7 +667,10 @@ function Leads({ leads, setLeads, setClients, setContratos }) {
                   <td style={{ padding:"12px 16px", fontSize:12, color:l.proximo_followup<=today()?T.red:T.textSub, fontFamily:T.mono }}>{fmtDate(l.proximo_followup)}</td>
                   <td style={{ padding:"12px 16px", fontSize:12, color:T.textSub }}>{l.responsavel}</td>
                   <td style={{ padding:"12px 16px" }}>
-                    <Btn size="sm" variant="danger" onClick={e=>{e.stopPropagation();setConfirm(l.id);}}>🗑</Btn>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <Btn size="sm" variant="ghost" onClick={e=>{e.stopPropagation();setWaModal({nome:l.nome,phone:l.whatsapp});}}>💬</Btn>
+                      <Btn size="sm" variant="danger" onClick={e=>{e.stopPropagation();setConfirm(l.id);}}>🗑</Btn>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -571,6 +684,7 @@ function Leads({ leads, setLeads, setClients, setContratos }) {
         <LeadForm lead={selected||{}} onSave={saveLead} onClose={()=>{setModal(null);setSelected(null);}} />
       </Modal>
       <Confirm open={!!confirm} msg="Remover este lead permanentemente?" onOk={()=>deleteLead(confirm)} onCancel={()=>setConfirm(null)} />
+      <WhatsAppModal open={!!waModal} onClose={()=>setWaModal(null)} nome={waModal?.nome||""} phone={waModal?.phone||""} />
     </div>
   );
 }
@@ -632,6 +746,7 @@ function Clientes({ clients, setClients, financeiro, tickets }) {
   const [selected, setSelected] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [detailTab, setDetailTab] = useState("Resumo");
+  const [waModal, setWaModal] = useState(null);
 
   const responsaveis = ["Todos",...new Set(clients.map(c=>c.responsavel))];
 
@@ -709,6 +824,7 @@ function Clientes({ clients, setClients, financeiro, tickets }) {
                 <td style={{ padding:"13px 16px", fontSize:12, color:T.textSub }}>{c.responsavel}</td>
                 <td style={{ padding:"13px 16px" }}>
                   <div style={{ display:"flex", gap:6 }}>
+                    <Btn size="sm" variant="ghost" onClick={e=>{e.stopPropagation();setWaModal({nome:c.nome_fantasia||c.razao_social,phone:c.whatsapp_fin||c.whatsapp_socio});}}>💬</Btn>
                     <Btn size="sm" variant="soft" onClick={e=>{e.stopPropagation();setSelected(c);setModal("edit");}}>✏</Btn>
                     <Btn size="sm" variant="danger" onClick={e=>{e.stopPropagation();setConfirm(c.id);}}>🗑</Btn>
                   </div>
@@ -798,6 +914,7 @@ function Clientes({ clients, setClients, financeiro, tickets }) {
         <ClienteForm cliente={selected||{}} onSave={saveCliente} onClose={()=>{setModal(null);setSelected(null);}} />
       </Modal>
       <Confirm open={!!confirm} msg="Remover este cliente? Esta ação não pode ser desfeita." onOk={()=>deleteCliente(confirm)} onCancel={()=>setConfirm(null)} />
+      <WhatsAppModal open={!!waModal} onClose={()=>setWaModal(null)} nome={waModal?.nome||""} phone={waModal?.phone||""} />
     </div>
   );
 }
