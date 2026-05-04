@@ -413,8 +413,12 @@ function Chat() {
       if (!res.ok) throw new Error("Falha ao buscar contatos");
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
-      // Filtra só chats individuais e grupos, ordena por nome
-      list.sort((a, b) => (a.pushName||a.remoteJid||"").localeCompare(b.pushName||b.remoteJid||""));
+      // Ordena por updatedAt decrescente (mais recentes primeiro)
+      list.sort((a, b) => {
+        const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return tb - ta;
+      });
       setChats(list);
       setError(null);
     } catch(e) {
@@ -498,7 +502,9 @@ function Chat() {
   };
   const tsToTime = (ts) => {
     if (!ts) return "";
-    const d = new Date(ts * 1000);
+    // Suporta tanto timestamp Unix (número) quanto string ISO
+    const d = typeof ts === "number" ? new Date(ts * 1000) : new Date(ts);
+    if (isNaN(d.getTime())) return "";
     const now = new Date();
     if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
     return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
@@ -569,7 +575,7 @@ function Chat() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
                     <span style={{ fontWeight:600, fontSize:13, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:140 }}>{chatName(c)}</span>
-                    <span style={{ fontSize:10, color:T.textMuted, flexShrink:0 }}>{tsToTime(c.lastMsgTimestamp || c.updatedAt)}</span>
+                    <span style={{ fontSize:10, color:T.textMuted, flexShrink:0 }}>{tsToTime(c.updatedAt || c.lastMsgTimestamp)}</span>
                   </div>
                   <div style={{ fontSize:12, color:T.textMuted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", marginTop:2 }}>{chatLast(c)}</div>
                 </div>
