@@ -402,19 +402,19 @@ function Chat() {
   const msgsEndRef = useRef(null);
   const pollRef = useRef(null);
 
-  // Buscar lista de chats
+  // Buscar lista de contatos (usa findContacts que funciona)
   const fetchChats = async () => {
     try {
-      const res = await fetch(`${EVO_URL}/chat/findChats/${EVO_INSTANCE}`, {
+      const res = await fetch(`${EVO_URL}/chat/findContacts/${EVO_INSTANCE}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": EVO_KEY },
-        body: JSON.stringify({})
+        body: JSON.stringify({ where: {} })
       });
-      if (!res.ok) throw new Error("Falha ao buscar chats");
+      if (!res.ok) throw new Error("Falha ao buscar contatos");
       const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.chats || []);
-      // Ordenar por última mensagem mais recente
-      list.sort((a, b) => (b.lastMsgTimestamp || b.updatedAt || 0) - (a.lastMsgTimestamp || a.updatedAt || 0));
+      const list = Array.isArray(data) ? data : [];
+      // Filtra só chats individuais e grupos, ordena por nome
+      list.sort((a, b) => (a.pushName||a.remoteJid||"").localeCompare(b.pushName||b.remoteJid||""));
       setChats(list);
       setError(null);
     } catch(e) {
@@ -424,7 +424,7 @@ function Chat() {
     }
   };
 
-  // Buscar mensagens de um chat
+  // Buscar mensagens de um contato
   const fetchMsgs = async (remoteJid) => {
     if (!remoteJid) return;
     setLoadingMsgs(true);
@@ -462,13 +462,13 @@ function Chat() {
   useEffect(() => {
     if (selChat) {
       setMsgs([]);
-      fetchMsgs(selChat.id);
+      fetchMsgs(selChat.remoteJid || selChat.id);
     }
   }, [selChat]);
 
   const sendMsg = async () => {
     if (!text.trim() || !selChat || sending) return;
-    const number = selChat.id.replace(/@.*/,"");
+    const number = (selChat.remoteJid || selChat.id || "").replace(/@.*/,"");
     setSending(true);
     const ok = await sendWhatsAppMsg(number, text.trim());
     if (ok) {
@@ -482,8 +482,15 @@ function Chat() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
   };
 
-  // Nome amigável do chat
-  const chatName = (c) => c.pushName || c.name || (c.id||"").replace(/@.*/,"").replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "($2) $3-$4");
+  // Nome amigável do contato
+  const chatName = (c) => {
+    const n = c.pushName || c.name || "";
+    if (n) return n;
+    const jid = c.remoteJid || c.id || "";
+    const num = jid.replace(/@.*/,"");
+    if (num.length >= 10) return num.replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "+$1 ($2) $3-$4");
+    return jid;
+  };
   const chatAvatar = (c) => (chatName(c)||"?")[0].toUpperCase();
   const chatLast = (c) => {
     const t = c.lastMessage?.conversation || c.lastMessage?.extendedTextMessage?.text || c.lastMsgText || "";
@@ -547,9 +554,10 @@ function Chat() {
             <div style={{ padding:24, textAlign:"center", color:T.textMuted, fontSize:13 }}>Nenhuma conversa encontrada</div>
           )}
           {filtered.map(c => {
-            const active = selChat?.id === c.id;
+            const cid = c.remoteJid || c.id;
+            const active = (selChat?.remoteJid || selChat?.id) === cid;
             return (
-              <div key={c.id} onClick={()=>setSelChat(c)}
+              <div key={cid} onClick={()=>setSelChat(c)}
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", cursor:"pointer", borderBottom:`1px solid ${T.border}22`,
                   background: active ? T.accentGlow : "transparent", transition:"background 0.1s" }}
                 onMouseEnter={e=>{ if(!active) e.currentTarget.style.background=T.bg; }}
@@ -590,11 +598,11 @@ function Chat() {
             </div>
             <div>
               <div style={{ fontWeight:700, fontSize:14, color:T.text }}>{chatName(selChat)}</div>
-              <div style={{ fontSize:11, color:T.textMuted }}>{(selChat.id||"").replace(/@.*/,"").replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "+$1 ($2) $3-$4")}</div>
+              <div style={{ fontSize:11, color:T.textMuted }}>{(selChat.remoteJid||selChat.id||"").replace(/@.*/,"").replace(/(\d{2})(\d{2})(\d{4,5})(\d{4})/, "+$1 ($2) $3-$4")}</div>
             </div>
             <div style={{ marginLeft:"auto" }}>
-              <button onClick={()=>fetchMsgs(selChat.id)}
-                style={{ background:T.accentGlow, border:`1px solid ${T.accent}44`, color:T.accent, borderRadius:8, padding:"5px 12px", fontSize:12, cursor:"pointer", fontWeight:600 }}>
+              <button onClick={()=>fetchMsgs(selChat.remoteJid||selChat.id)}
+              style={{ background:T.accentGlow, border:`1px solid ${T.accent}44`, color:T.accent, borderRadius:8, padding:"5px 12px", fontSize:12, cursor:"pointer", fontWeight:600 }}>
                 ↻ Atualizar
               </button>
             </div>
